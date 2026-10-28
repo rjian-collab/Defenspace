@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Defenspace</title>
+<meta name="description" content="Defenspace：站上戰艦艦橋，一邊攻擊移動中的敵艦，一邊攔截來襲彈頭、張開三向護盾。電腦與手機都能玩。">
+<meta property="og:title" content="Defenspace">
+<meta property="og:description" content="艦橋即時射控：主動攻擊、被動防禦。">
+<meta property="og:image" content="https://rjian-collab.github.io/Defenspace/og-cover.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Extra+Condensed:wght@300;600;800&family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* 版面概念：整頁是一扇艦橋觀景窗。骨白肋條框住星空，左側是 HUD 刻度帶上的巨大艦名，右下是戰術輔助螢幕形式的任務簡報。 */
+:root{
+  --void:#04070b;      /* 深空底色，帶一點藍 */
+  --bone:#e9e2d2;      /* 駕駛艙骨架 */
+  --mint:142,243,218;  /* 射控 */
+  --violet:184,155,255;/* 戰術 */
+  --alert:255,84,102;  /* 警告／彈道飛彈 */
+  --amber:255,182,74;  /* 集束彈 */
+  --tx:#d8e6e6;
+  --dim:#7f9a9c;
+  --f-disp:"Saira Extra Condensed","Bahnschrift Condensed","Arial Narrow",sans-serif;
+  --f-cjk:"Noto Sans TC","Noto Sans CJK TC","Microsoft JhengHei","PingFang TC",sans-serif;
+  --f-num:"IBM Plex Mono","Cascadia Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--void);color:var(--tx);font-family:var(--f-cjk)}
+body{overflow-x:hidden}
+#sky{position:fixed;inset:0;width:100%;height:100%;display:block}
+#ribs{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
+a{color:inherit}
+:focus-visible{outline:2px solid #fff;outline-offset:3px}
+
+.wrap{position:relative;z-index:3;min-height:100svh;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(300px,.85fr);gap:clamp(20px,4vw,64px);align-items:end;
+  padding-block:clamp(28px,7vh,72px) clamp(24px,6vh,60px);padding-left:max(clamp(28px,6vw,96px),env(safe-area-inset-left,0px));padding-right:max(clamp(28px,6vw,96px),env(safe-area-inset-right,0px))}
+
+/* 左：艦名 */
+.id{align-self:center;min-width:0}
+.eyebrow{display:flex;align-items:center;gap:10px;font:600 12px var(--f-num);letter-spacing:.22em;color:rgb(var(--mint));text-transform:uppercase}
+.eyebrow i{display:inline-block;width:36px;height:1px;background:rgb(var(--mint))}
+h1{margin:14px 0 0;font:800 clamp(64px,12.5vw,190px)/.82 var(--f-disp);letter-spacing:.01em;text-transform:uppercase;color:#f3efe6;
+  text-shadow:0 0 28px rgba(var(--mint),.18)}
+h1 .cut{color:transparent;-webkit-text-stroke:1.4px rgba(var(--mint),.9);text-shadow:none}
+.tape{display:flex;justify-content:space-between;max-width:min(780px,100%);margin-top:18px;padding-top:6px;border-top:1px solid rgba(var(--mint),.55);font:400 11px var(--f-num);color:rgba(var(--mint),.75)}
+.tape span{position:relative}
+.tape span::before{content:"";position:absolute;left:50%;top:-12px;width:1px;height:6px;background:rgba(var(--mint),.75)}
+.sub{margin:22px 0 0;max-width:34em;font:500 clamp(15px,1.5vw,18px)/1.75 var(--f-cjk);color:var(--tx);text-wrap:pretty}
+.sub b{color:rgb(var(--mint));font-weight:700}
+.sub em{font-style:normal;color:rgb(var(--violet));font-weight:700}
+.cta{display:flex;flex-wrap:wrap;align-items:center;gap:16px 22px;margin-top:30px}
+.go{position:relative;display:inline-flex;align-items:center;gap:14px;padding:16px 30px 16px 22px;border:1.5px solid rgb(var(--mint));background:rgba(var(--mint),.1);
+  color:#eafff8;text-decoration:none;font:700 18px var(--f-cjk);letter-spacing:.18em;transition:background .2s,color .2s}
+.go kbd{font:600 11px var(--f-num);letter-spacing:.06em;padding:3px 6px;background:rgb(var(--mint));color:#061216}
+.go::after{content:"";position:absolute;inset:-6px;border:1px solid rgba(var(--mint),.3);pointer-events:none}
+.go:hover{background:rgb(var(--mint));color:#061216}
+.go:hover kbd{background:#061216;color:rgb(var(--mint))}
+.meta{font:400 12px/1.6 var(--f-num);color:#b9cccd;text-shadow:0 1px 6px #000,0 0 2px #000}
+
+/* 右：戰術輔助簡報 */
+.tac{position:relative;min-width:0;border:1px solid rgba(var(--violet),.75);background:rgba(10,8,24,.42);backdrop-filter:blur(3px);padding:22px 20px 18px;box-shadow:0 0 18px rgba(var(--violet),.12)}
+.tag{position:absolute;left:-1px;top:-18px;height:18px;line-height:18px;padding:0 8px;background:rgb(var(--violet));color:#0d0820;font:600 11px/18px var(--f-num);letter-spacing:.12em}
+.threats{display:grid;gap:12px;margin:0;padding:0;list-style:none}
+.threats li{display:grid;grid-template-columns:30px minmax(0,1fr);gap:12px;align-items:start}
+.threats svg{width:30px;height:30px}
+.threats b{display:block;font:700 15px var(--f-cjk);letter-spacing:.06em}
+.threats p{margin:2px 0 0;font:400 13px/1.6 var(--f-cjk);color:#c9d6d8}
+.r b{color:rgb(var(--alert))} .p b{color:rgb(var(--violet))} .a b{color:rgb(var(--amber))}
+.ctl{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;padding-top:14px;border-top:1px dashed rgba(var(--violet),.45)}
+.ctl h2{margin:0 0 4px;font:600 11px var(--f-num);letter-spacing:.2em;color:rgb(var(--violet))}
+.ctl p{margin:0;font:400 12.5px/1.65 var(--f-cjk);color:#c9d6d8}
+.ctl kbd{font:600 10.5px var(--f-num);padding:1px 4px;border:1px solid rgba(var(--violet),.7);color:#efeaff}
+
+.foot{position:relative;z-index:3;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px 24px;padding-block:0 22px;padding-left:max(clamp(28px,6vw,96px),env(safe-area-inset-left,0px));padding-right:max(clamp(28px,6vw,96px),env(safe-area-inset-right,0px));font:400 11px var(--f-num);color:var(--dim);letter-spacing:.06em}
+
+@media (max-width:860px){
+  .wrap{grid-template-columns:1fr;align-items:start;min-height:auto;padding-top:56px}
+  .tape{font-size:10px}
+}
+@media (max-width:480px){
+  .eyebrow .en{display:none}
+  .ctl{grid-template-columns:1fr}
+  .go{font-size:16px;padding:14px 22px 14px 16px}
+}
+@media (prefers-reduced-motion:reduce){.go{transition:none}}
+</style>
+</head>
+<body>
+<canvas id="sky" aria-hidden="true"></canvas>
+<canvas id="ribs" aria-hidden="true"></canvas>
+
+<main class="wrap">
+  <section class="id">
+    <div class="eyebrow"><i></i><span class="en">Bridge fire control ·</span> 艦橋即時射控</div>
+    <h1>Defen<span class="cut">space</span></h1>
+    <div class="tape" aria-hidden="true"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span></div>
+    <p class="sub">你站在戰艦艦橋。敵艦一邊移動、一邊朝你發射彈頭。用準星<b>主動攻擊</b>，把敵艦打到解體；同時從戰術輔助螢幕<em>張開護盾、攔截來襲</em>，撐過一波比一波快的攻勢。</p>
+    <div class="cta">
+      <a class="go" href="play.html" id="start"><kbd>ENTER</kbd>進入艦橋</a>
+      <span class="meta">電腦與手機皆可玩　建議手機橫放<br>開啟音效效果更好</span>
+    </div>
+  </section>
+
+  <aside class="tac" aria-label="任務簡報">
+    <span class="tag">TAC 任務簡報</span>
+    <ul class="threats">
+      <li class="r"><svg viewBox="0 0 30 30" fill="none" stroke="rgb(255,84,102)" stroke-width="1.8"><path d="M15 3 27 15 15 27 3 15Z"/><circle cx="15" cy="15" r="2.2" fill="rgb(255,84,102)" stroke="none"/></svg>
+        <div><b>彈道飛彈</b><p>準星對準後發射反彈道飛彈（ABM）攔截。四管發射器，各需 2 秒裝填。</p></div></li>
+      <li class="p"><svg viewBox="0 0 30 30" fill="none" stroke="rgb(184,155,255)" stroke-width="1.8" stroke-dasharray="3 3"><circle cx="15" cy="15" r="11"/><circle cx="15" cy="15" r="3" fill="rgb(184,155,255)" stroke="none"/></svg>
+        <div><b>電漿彈</b><p>無法攔截，只能在它要打的方向張開護盾：左舷、艦首、右舷。</p></div></li>
+      <li class="a"><svg viewBox="0 0 30 30" fill="none" stroke="rgb(255,182,74)" stroke-width="1.8"><path d="M15 4 27 25H3Z"/><path d="M15 12v6" stroke-linecap="round"/></svg>
+        <div><b>集束彈</b><p>飛到一半分裂成三枚子彈頭分打三個方向。分裂前打掉最划算。</p></div></li>
+    </ul>
+    <div class="ctl">
+      <div><h2>DESKTOP</h2><p>滑鼠瞄準、點擊發射<br><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd> 換武器　<kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 護盾</p></div>
+      <div><h2>MOBILE</h2><p>手指點哪裡準星就到哪裡<br>點到彈頭直接攔截</p></div>
+    </div>
+  </aside>
+</main>
+
+<footer class="foot">
+  <span>DEFENSPACE · 船艦、音效與畫面皆為程式原創生成</span>
+  <span>THREE.JS · WEB AUDIO</span>
+</footer>
+
+<script>
+(() => {
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const sky = document.getElementById("sky"), ribs = document.getElementById("ribs");
+  const c = sky.getContext("2d"), r = ribs.getContext("2d");
+  let W = 0, H = 0, D = 1, stars = [], ev = [], t0 = performance.now();
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  function size() {
+    D = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
+    for (const cv of [sky, ribs]) { cv.width = W * D; cv.height = H * D; cv.getContext("2d").setTransform(D, 0, 0, D, 0, 0); }
+    stars = Array.from({ length: Math.round(W * H / 2600) }, () => ({ x: rnd(0, W), y: rnd(0, H), z: rnd(.2, 1), p: rnd(0, 6.28) }));
+    drawRibs();
+  }
+
+  // 骨白肋條：與遊戲座艙同一套曲線
+  function drawRibs() {
+    r.clearRect(0, 0, W, H);
+    const w = Math.max(5, Math.min(W, H * 2) * .011), sx = W < H ? .035 : .022;
+    const rib = (p, ww) => {
+      r.lineCap = "round";
+      r.strokeStyle = "rgba(0,0,0,.5)"; r.lineWidth = ww + 3; p(); r.stroke();
+      r.strokeStyle = "#a99e8a"; r.lineWidth = ww; p(); r.stroke();
+      r.strokeStyle = "#e3dbcb"; r.lineWidth = ww * .62; p(); r.stroke();
+      r.save(); r.strokeStyle = "#f4efe4"; r.lineWidth = Math.max(1, ww * .18); r.translate(-ww * .12, -ww * .12); p(); r.stroke(); r.restore();
+    };
+    r.fillStyle = "rgba(8,9,11,.6)";
+    r.beginPath(); r.moveTo(0, 0); r.lineTo(W * (sx + .02), 0); r.bezierCurveTo(W * (sx - .005), H * .35, W * (sx - .015), H * .7, W * sx, H); r.lineTo(0, H); r.fill();
+    r.beginPath(); r.moveTo(W, 0); r.lineTo(W * (1 - sx - .02), 0); r.bezierCurveTo(W * (1 - sx + .005), H * .35, W * (1 - sx + .015), H * .7, W * (1 - sx), H); r.lineTo(W, H); r.fill();
+    rib(() => { r.beginPath(); r.moveTo(-10, H * .006); r.bezierCurveTo(W * .3, H * .032, W * .7, H * .032, W + 10, H * .006); }, w);
+    rib(() => { r.beginPath(); r.moveTo(W * (sx + .02), -10); r.bezierCurveTo(W * (sx - .005), H * .35, W * (sx - .015), H * .7, W * sx, H + 10); }, w * .9);
+    rib(() => { r.beginPath(); r.moveTo(W * (1 - sx - .02), -10); r.bezierCurveTo(W * (1 - sx + .005), H * .35, W * (1 - sx + .015), H * .7, W * (1 - sx), H + 10); }, w * .9);
+    rib(() => { r.beginPath(); r.moveTo(-10, H * .998); r.bezierCurveTo(W * .35, H * .982, W * .65, H * .982, W + 10, H * .998); }, w * .7);
+  }
+
+  // 一枚彈頭從遠方敵艦方向飛來，半路被 ABM 攔截
+  function spawn() {
+    const kind = Math.random() < .6 ? "r" : Math.random() < .5 ? "a" : "p";
+    const sx = rnd(W * .55, W * .85), sy = rnd(H * .18, H * .35);
+    ev.push({ kind, sx, sy, ex: rnd(W * .3, W * .95), ey: H * rnd(.75, 1.05), t: 0, dur: rnd(2.6, 3.6), hitAt: kind === "p" ? 2 : rnd(.45, .75), boom: -1 });
+  }
+  const COL = { r: "255,84,102", a: "255,182,74", p: "184,155,255" };
+
+  function frame(now) {
+    const t = (now - t0) / 1000, dt = 1 / 60;
+    c.clearRect(0, 0, W, H);
+    // 星雲與行星邊緣
+    let g = c.createRadialGradient(W * .78, H * .28, 0, W * .78, H * .28, Math.max(W, H) * .7);
+    g.addColorStop(0, "rgba(70,40,120,.35)"); g.addColorStop(.45, "rgba(20,30,70,.18)"); g.addColorStop(1, "rgba(4,7,11,0)");
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+    const pr = Math.max(W, H) * 1.15, pcx = W * .62, pcy = H + pr * .78;
+    g = c.createRadialGradient(pcx, pcy - pr * .2, pr * .6, pcx, pcy, pr);
+    g.addColorStop(0, "#06203a"); g.addColorStop(.9, "#0d4a78"); g.addColorStop(.985, "#4fb7e6"); g.addColorStop(1, "rgba(79,183,230,0)");
+    c.fillStyle = g; c.beginPath(); c.arc(pcx, pcy, pr, 0, 6.283); c.fill();
+    // 星點
+    for (const s of stars) {
+      const a = .35 + .65 * s.z * (reduce ? 1 : .75 + .25 * Math.sin(t * 1.6 + s.p));
+      c.fillStyle = `rgba(225,235,255,${a.toFixed(2)})`; c.fillRect(s.x, s.y, s.z * 1.6, s.z * 1.6);
+    }
+    // 遠方敵艦剪影（細長艦體＋引擎光）
+    const nar = W < 860, ex = W * (nar ? .7 : .74) + (reduce ? 0 : Math.sin(t * .25) * 18), ey = H * (nar ? .52 : .26) + (reduce ? 0 : Math.sin(t * .33) * 6), L = Math.min(W, 1400) * .16;
+    c.fillStyle = "#3a4656"; c.fillRect(ex - L / 2, ey - 3, L, 7); c.fillRect(ex - L * .1, ey - 9, L * .22, 6); c.fillRect(ex - L * .42, ey + 3, L * .3, 4); c.fillStyle = "#8a97a8"; c.fillRect(ex - L / 2, ey - 3, L, 1); c.fillRect(ex - L * .1, ey - 9, L * .22, 1); c.fillStyle = "rgba(255,180,120,.8)"; for (let i = 0; i < 9; i++) c.fillRect(ex - L * .4 + i * L * .09, ey, 2, 1.5);
+    c.fillStyle = "rgba(120,190,255,.9)"; c.fillRect(ex + L / 2, ey - 2, 3, 5);
+    c.strokeStyle = "rgba(142,243,218,.7)"; c.lineWidth = 1; c.save(); c.translate(ex, ey); c.rotate(Math.PI / 4);
+    const q = L * .14; c.strokeRect(-q, -q, q * 2, q * 2); c.restore();
+    c.font = "600 11px 'IBM Plex Mono',monospace"; c.fillStyle = "rgba(142,243,218,.85)"; nar || c.fillText("TGT FG-12  LOCK", ex + L * .2, ey - L * .17);
+    // 彈頭與攔截
+    if (!reduce && (ev.length < 3 && Math.random() < .012)) spawn();
+    for (let i = ev.length - 1; i >= 0; i--) {
+      const e = ev[i]; e.t += dt / e.dur;
+      const u = Math.min(1, e.t), k = u * u, x = e.sx + (e.ex - e.sx) * k, y = e.sy + (e.ey - e.sy) * k, s = 2 + 9 * k;
+      if (e.boom < 0) {
+        c.strokeStyle = `rgba(${COL[e.kind]},.35)`; c.lineWidth = s * .5; c.beginPath();
+        const k0 = Math.max(0, u - .12) ** 2; c.moveTo(e.sx + (e.ex - e.sx) * k0, e.sy + (e.ey - e.sy) * k0); c.lineTo(x, y); c.stroke();
+        c.fillStyle = "#fff"; c.beginPath(); c.arc(x, y, s * .45, 0, 6.283); c.fill();
+        c.strokeStyle = `rgb(${COL[e.kind]})`; c.lineWidth = 1.4; c.beginPath();
+        if (e.kind === "p") c.arc(x, y, s + 6, 0, 6.283); else { c.moveTo(x, y - s - 6); c.lineTo(x + s + 6, y); c.lineTo(x, y + s + 6); c.lineTo(x - s - 6, y); c.closePath(); }
+        c.stroke();
+        if (u >= e.hitAt) { e.boom = 0; e.bx = x; e.by = y; e.bs = s; }
+        if (u >= 1) ev.splice(i, 1);
+      } else {
+        e.boom += dt; const b = e.boom / .7, R = e.bs * 2 + 70 * b;
+        c.fillStyle = `rgba(255,255,255,${Math.max(0, .9 - b * 1.4).toFixed(2)})`; c.beginPath(); c.arc(e.bx, e.by, e.bs * 2 * (1 - b) + 2, 0, 6.283); c.fill();
+        c.strokeStyle = `rgba(154,248,255,${Math.max(0, .8 - b).toFixed(2)})`; c.lineWidth = 2; c.beginPath(); c.arc(e.bx, e.by, R, 0, 6.283); c.stroke();
+        if (b >= 1) ev.splice(i, 1);
+      }
+    }
+    if (!reduce) requestAnimationFrame(frame);
+  }
+  addEventListener("resize", size);
+  size(); requestAnimationFrame(frame);
+  addEventListener("keydown", (e) => { if (e.key === "Enter" && document.activeElement === document.body) location.href = "play.html"; });
+})();
+</script>
+</body>
+</html>
